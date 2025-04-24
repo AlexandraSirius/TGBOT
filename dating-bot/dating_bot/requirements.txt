@@ -1,0 +1,7 @@
+# Основные зависимости
+python-telegram-bot
+celery
+redis
+sqlalchemy
+prometheus-client
+python-dotenv
