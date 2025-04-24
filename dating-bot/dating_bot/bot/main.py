@@ -18,7 +18,7 @@ from dating_bot.bot.handlers import (
     profile_age,
     profile_gender,
     profile_city,
-    profile_contact,
+    profile_nickname,
     edit_profile,
     show_menu,
     search,
@@ -28,14 +28,14 @@ from dating_bot.bot.handlers import (
     AGE,
     GENDER,
     CITY,
-    CONTACT,
+    NICKNAME
 )
 
 # Загрузка токена из .env
 load_dotenv()
 TOKEN = os.getenv("TELEGRAM_TOKEN")
 
-# /start — регистрация и меню
+# /start
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     telegram_id = update.effective_user.id
     username = update.effective_user.username
@@ -48,7 +48,9 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
         await update.message.reply_text(f"С возвращением, {first_name}! 💫")
     else:
         crud.create_user(db, telegram_id, username, first_name)
-        await update.message.reply_text(f"Привет, {first_name}! 👋\nТы зарегистрирован в Fountains Of Vanya!")
+        await update.message.reply_text(
+            f"Привет, {first_name}! 👋\nТы зарегистрирован в Fountains Of Vanya!"
+        )
 
     db.close()
 
@@ -57,10 +59,10 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
         [KeyboardButton("/edit"), KeyboardButton("/search")],
         [KeyboardButton("/myprofile"), KeyboardButton("/liked")]
     ]
-    markup = ReplyKeyboardMarkup(keyboard, resize_keyboard=True, one_time_keyboard=False)
+    markup = ReplyKeyboardMarkup(keyboard, resize_keyboard=True)
     await update.message.reply_text("Выбери действие 👇", reply_markup=markup)
 
-# Запуск бота
+# Основной запуск
 def main():
     app = Application.builder().token(TOKEN).build()
 
@@ -72,7 +74,7 @@ def main():
     app.add_handler(CommandHandler("liked", liked_profiles))
     app.add_handler(CallbackQueryHandler(button_handler))
 
-    # Анкета и редактирование — через ConversationHandler
+    # Анкета и редактирование
     conv_handler = ConversationHandler(
         entry_points=[
             CommandHandler("anketa", profile_start),
@@ -82,7 +84,7 @@ def main():
             AGE: [MessageHandler(filters.TEXT & ~filters.COMMAND, profile_age)],
             GENDER: [MessageHandler(filters.TEXT & ~filters.COMMAND, profile_gender)],
             CITY: [MessageHandler(filters.TEXT & ~filters.COMMAND, profile_city)],
-            CONTACT: [MessageHandler(filters.TEXT & ~filters.COMMAND, profile_contact)],
+            NICKNAME: [MessageHandler(filters.TEXT & ~filters.COMMAND, profile_nickname)],
         },
         fallbacks=[]
     )
