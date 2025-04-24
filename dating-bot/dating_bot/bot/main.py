@@ -1,6 +1,6 @@
 import os
 from dotenv import load_dotenv
-from telegram import Update, ReplyKeyboardMarkup, KeyboardButton
+from telegram import Update, KeyboardButton, ReplyKeyboardMarkup
 from telegram.ext import (
     Application,
     CommandHandler,
@@ -8,28 +8,36 @@ from telegram.ext import (
     ConversationHandler,
     MessageHandler,
     CallbackQueryHandler,
-    filters,
+    filters
 )
 
-from dating_bot.database.session import SessionLocal
-from dating_bot.database import crud
 from dating_bot.bot.handlers import (
+    show_menu,
     profile_start,
+    edit_profile,
     profile_age,
     profile_gender,
     profile_city,
     profile_nickname,
-    edit_profile,
-    show_menu,
     button_handler,
-    AGE, GENDER, CITY, NICKNAME
+    search,
+    my_profile,
+    liked_profiles,
+    AGE,
+    GENDER,
+    CITY,
+    NICKNAME
 )
 
-# Загрузка токена
+from dating_bot.database.session import SessionLocal
+from dating_bot.database import crud
+
+# Загрузка переменных среды
 load_dotenv()
 TOKEN = os.getenv("TELEGRAM_TOKEN")
 
-# /start
+
+# Команда /start
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     telegram_id = update.effective_user.id
     username = update.effective_user.username
@@ -42,31 +50,26 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
         await update.message.reply_text(f"С возвращением, {first_name}! 💫")
     else:
         crud.create_user(db, telegram_id, username, first_name)
-        await update.message.reply_text(
-            f"Привет, {first_name}! 👋\nТы зарегистрирован в Fountains Of Vanya!"
-        )
+        await update.message.reply_text(f"Привет, {first_name}! 👋\nТы зарегистрирован в Fountains Of Vanya!")
 
     db.close()
 
-    keyboard = [
-        [KeyboardButton("/start"), KeyboardButton("/anketa")],
-        [KeyboardButton("/edit"), KeyboardButton("/search")],
-        [KeyboardButton("/myprofile"), KeyboardButton("/liked")]
-    ]
-    markup = ReplyKeyboardMarkup(keyboard, resize_keyboard=True)
-    await update.message.reply_text("Выбери действие 👇", reply_markup=markup)
+    # Показываем меню
+    await show_menu(update, context)
 
-# Запуск бота
 
 def main():
     app = Application.builder().token(TOKEN).build()
 
-    # Команды
+    # Основные команды
     app.add_handler(CommandHandler("start", start))
     app.add_handler(CommandHandler("menu", show_menu))
+    app.add_handler(CommandHandler("search", search))
+    app.add_handler(CommandHandler("myprofile", my_profile))
+    app.add_handler(CommandHandler("liked", liked_profiles))
     app.add_handler(CallbackQueryHandler(button_handler))
 
-    # Анкета и редактирование
+    # Обработка анкеты и редактирования
     conv_handler = ConversationHandler(
         entry_points=[
             CommandHandler("anketa", profile_start),

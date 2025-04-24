@@ -100,22 +100,25 @@ async def profile_nickname(update: Update, context: ContextTypes.DEFAULT_TYPE):
         msg = "Анкета успешно сохранена! 🔥"
 
     db.close()
-    from telegram import ReplyKeyboardRemove
+    await update.message.reply_text(msg)
 
-    await update.message.reply_text(msg, reply_markup=ReplyKeyboardRemove())
+    keyboard = [
+        [KeyboardButton("/start"), KeyboardButton("/anketa")],
+        [KeyboardButton("/edit"), KeyboardButton("/search")],
+        [KeyboardButton("/myprofile"), KeyboardButton("/liked")]
+    ]
+    markup = ReplyKeyboardMarkup(keyboard, resize_keyboard=True)
+    await update.message.reply_text("Выбери действие 👇", reply_markup=markup)
 
-    #await update.message.reply_text(msg)
     return ConversationHandler.END
 
-# Обработка лайков и совпадений
+# Обработка кнопок (лайк/пропуск)
 async def button_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
     query = update.callback_query
     await query.answer()
     action, target_id = query.data.split(":")
-    from_id = update.effective_user.id
-
     db = SessionLocal()
-    from_user = crud.get_user_by_telegram_id(db, from_id)
+    from_user = crud.get_user_by_telegram_id(db, update.effective_user.id)
     to_user = db.query(User).filter(User.id == int(target_id)).first()
 
     existing_like = db.query(Like).filter_by(
@@ -193,7 +196,7 @@ async def search(update: Update, context: ContextTypes.DEFAULT_TYPE):
     await update.message.reply_text(text, reply_markup=markup)
     db.close()
 
-# Моя анкета
+# Команда /myprofile
 async def my_profile(update: Update, context: ContextTypes.DEFAULT_TYPE):
     db = SessionLocal()
     user = crud.get_user_by_telegram_id(db, update.effective_user.id)
@@ -211,7 +214,7 @@ async def my_profile(update: Update, context: ContextTypes.DEFAULT_TYPE):
     )
     await update.message.reply_text(text)
 
-# Понравившиеся анкеты
+# Команда /liked
 async def liked_profiles(update: Update, context: ContextTypes.DEFAULT_TYPE):
     db = SessionLocal()
     user = crud.get_user_by_telegram_id(db, update.effective_user.id)
