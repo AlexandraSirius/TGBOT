@@ -4,7 +4,7 @@ from telegram import (
     ReplyKeyboardRemove,
     KeyboardButton,
     InlineKeyboardButton,
-    InlineKeyboardMarkup,
+    InlineKeyboardMarkup
 )
 from telegram.ext import (
     ContextTypes,
@@ -12,7 +12,7 @@ from telegram.ext import (
     MessageHandler,
     CommandHandler,
     CallbackQueryHandler,
-    filters,
+    filters
 )
 from sqlalchemy.orm import Session
 from dating_bot.database.models import Profile, User, Like
@@ -21,17 +21,17 @@ from dating_bot.database.session import SessionLocal
 
 AGE, GENDER, CITY, NICKNAME = range(4)
 
-# Главное меню
+# Меню
 async def show_menu(update: Update, context: ContextTypes.DEFAULT_TYPE):
     keyboard = [
         [KeyboardButton("/start"), KeyboardButton("/anketa")],
         [KeyboardButton("/edit"), KeyboardButton("/search")],
-        [KeyboardButton("/myprofile"), KeyboardButton("/liked")],
+        [KeyboardButton("/myprofile"), KeyboardButton("/liked")]
     ]
     markup = ReplyKeyboardMarkup(keyboard, resize_keyboard=True)
     await update.message.reply_text("Выбери действие 👇", reply_markup=markup)
 
-# Создание анкеты
+# Анкета
 async def profile_start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     db = SessionLocal()
     user = crud.get_user_by_telegram_id(db, update.effective_user.id)
@@ -43,7 +43,6 @@ async def profile_start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     await update.message.reply_text("Сколько тебе лет?")
     return AGE
 
-# Редактирование анкеты
 async def edit_profile(update: Update, context: ContextTypes.DEFAULT_TYPE):
     db = SessionLocal()
     user = crud.get_user_by_telegram_id(db, update.effective_user.id)
@@ -79,46 +78,98 @@ async def profile_nickname(update: Update, context: ContextTypes.DEFAULT_TYPE):
     context.user_data["nickname"] = update.message.text
     db = SessionLocal()
     user = crud.get_user_by_telegram_id(db, update.effective_user.id)
+    existing = db.query(Profile).filter(Profile.user_id == user.id).first()
 
-    profile = Profile(
-        user_id=user.id,
-        age=context.user_data["age"],
-        gender=context.user_data["gender"],
-        city=context.user_data["city"],
-        contact=context.user_data["nickname"]
-    )
+    if context.user_data.get("edit") and existing:
+        existing.age = context.user_data["age"]
+        existing.gender = context.user_data["gender"]
+        existing.city = context.user_data["city"]
+        existing.contact = context.user_data["nickname"]
+        db.commit()
+        msg = "Анкета обновлена! 🔁"
+    else:
+        profile = Profile(
+            user_id=user.id,
+            age=context.user_data["age"],
+            gender=context.user_data["gender"],
+            city=context.user_data["city"],
+            contact=context.user_data["nickname"]
+        )
+        db.add(profile)
+        db.commit()
+        msg = "Анкета успешно сохранена! 🔥"
 
-    # Удаление старой анкеты и лайков при редактировании
-    if context.user_data.get("edit"):
-        db.query(Like).filter((Like.from_user_id == user.id) | (Like.to_user_id == user.id)).delete()
-        db.query(Profile).filter(Profile.user_id == user.id).delete()
+    db.close()
+    from telegram import ReplyKeyboardRemove
+
+    await update.message.reply_text(msg, reply_markup=ReplyKeyboardRemove())
+
+    #await update.message.reply_text(msg)
+    return ConversationHandler.END
+
+# Обработка лайков и совпадений
+async def button_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    query = update.callback_query
+    await query.answer()
+    action, target_id = query.data.split(":")
+    from_id = update.effective_user.id
+
+    db = SessionLocal()
+    from_user = crud.get_user_by_telegram_id(db, from_id)
+    to_user = db.query(User).filter(User.id == int(target_id)).first()
+
+    existing_like = db.query(Like).filter_by(
+        from_user_id=from_user.id,
+        to_user_id=int(target_id)
+    ).first()
+
+    if not existing_like:
+        db.add(Like(
+            from_user_id=from_user.id,
+            to_user_id=int(target_id),
+            is_like=action
+        ))
         db.commit()
 
-    db.add(profile)
-    db.commit()
-    db.close()
+        mutual = db.query(Like).filter_by(
+            from_user_id=int(target_id),
+            to_user_id=from_user.id,
+            is_like="like"
+        ).first()
 
-    await update.message.reply_text("Анкета успешно сохранена! 🔥", reply_markup=ReplyKeyboardRemove())
-    await show_menu(update, context)
-    return ConversationHandler.END
+        if action == "like" and mutual:
+            try:
+                await context.bot.send_message(
+                    chat_id=int(to_user.telegram_id),
+                    text=f"💘 У вас совпадение с @{from_user.username or 'пользователем'}!"
+                )
+                await context.bot.send_message(
+                    chat_id=int(from_user.telegram_id),
+                    text=f"💘 У вас совпадение с @{to_user.username or 'пользователем'}!"
+                )
+            except Exception as e:
+                print(f"[Ошибка отправки мэтча]: {e}")
+
+    db.close()
+    await query.edit_message_text("Выбор сохранён!")
 
 # Команда /search
 async def search(update: Update, context: ContextTypes.DEFAULT_TYPE):
     db = SessionLocal()
-    user = crud.get_user_by_telegram_id(db, update.effective_user.id)
+    current_user = crud.get_user_by_telegram_id(db, update.effective_user.id)
 
-    if not user:
+    if not current_user:
         await update.message.reply_text("Вы не зарегистрированы. Напишите /start сначала.")
         db.close()
         return
 
-    my_profile = db.query(Profile).filter(Profile.user_id == user.id).first()
+    my_profile = db.query(Profile).filter(Profile.user_id == current_user.id).first()
     if not my_profile:
         await update.message.reply_text("Сначала заполни анкету с помощью /anketa 😉")
         db.close()
         return
 
-    profile = db.query(Profile).filter(Profile.user_id != user.id).first()
+    profile = db.query(Profile).filter(Profile.user_id != current_user.id).first()
     if not profile:
         await update.message.reply_text("Нет доступных анкет 😞")
         db.close()
@@ -133,7 +184,7 @@ async def search(update: Update, context: ContextTypes.DEFAULT_TYPE):
     ]
     markup = InlineKeyboardMarkup(keyboard)
     text = (
-        f"Имя: {target.first_name or 'Без имени'}\n"
+        f"Имя: {target.first_name or target.username or 'Без имени'}\n"
         f"Ник: {profile.contact}\n"
         f"Возраст: {profile.age}\n"
         f"Пол: {profile.gender}\n"
@@ -141,32 +192,6 @@ async def search(update: Update, context: ContextTypes.DEFAULT_TYPE):
     )
     await update.message.reply_text(text, reply_markup=markup)
     db.close()
-
-# Обработка кнопок лайк / скип
-async def button_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    query = update.callback_query
-    await query.answer()
-    action, target_id = query.data.split(":")
-    db = SessionLocal()
-    user = crud.get_user_by_telegram_id(db, update.effective_user.id)
-
-    existing = db.query(Like).filter_by(
-        from_user_id=user.id, to_user_id=int(target_id)
-    ).first()
-
-    if not existing:
-        db.add(Like(
-            from_user_id=user.id,
-            to_user_id=int(target_id),
-            is_like=action
-        ))
-        db.commit()
-        msg = "Выбор сохранён!"
-    else:
-        msg = "Ты уже выбирал эту анкету 😉"
-
-    db.close()
-    await query.edit_message_text(msg)
 
 # Моя анкета
 async def my_profile(update: Update, context: ContextTypes.DEFAULT_TYPE):

@@ -21,17 +21,11 @@ from dating_bot.bot.handlers import (
     profile_nickname,
     edit_profile,
     show_menu,
-    search,
     button_handler,
-    my_profile,
-    liked_profiles,
-    AGE,
-    GENDER,
-    CITY,
-    NICKNAME
+    AGE, GENDER, CITY, NICKNAME
 )
 
-# Загрузка токена из .env
+# Загрузка токена
 load_dotenv()
 TOKEN = os.getenv("TELEGRAM_TOKEN")
 
@@ -62,16 +56,14 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     markup = ReplyKeyboardMarkup(keyboard, resize_keyboard=True)
     await update.message.reply_text("Выбери действие 👇", reply_markup=markup)
 
-# Основной запуск
+# Запуск бота
+
 def main():
     app = Application.builder().token(TOKEN).build()
 
     # Команды
     app.add_handler(CommandHandler("start", start))
     app.add_handler(CommandHandler("menu", show_menu))
-    app.add_handler(CommandHandler("search", search))
-    app.add_handler(CommandHandler("myprofile", my_profile))
-    app.add_handler(CommandHandler("liked", liked_profiles))
     app.add_handler(CallbackQueryHandler(button_handler))
 
     # Анкета и редактирование
